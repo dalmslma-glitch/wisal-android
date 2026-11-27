@@ -1,5 +1,8 @@
 package com.wisal.app
 
+import android.net.Uri
+import java.util.UUID
+import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -18,6 +21,7 @@ data class WisalMessage(
     val id: String = "",
     val senderId: String = "",
     val text: String = "",
+    val mediaUrl: String = "",
     val createdAt: Long = 0L,
     val deliveredTo: List<String> = emptyList(),
     val readBy: List<String> = emptyList(),
@@ -111,6 +115,46 @@ object WisalMessaging {
                     onError(it.localizedMessage ?: "تعذر إرسال الرسالة.")
                 }
             }.addOnFailureListener { onError(it.localizedMessage ?: "تعذر إنشاء المحادثة.") }
+    }
+
+    fun sendImage(otherUid: String, uri: Uri, onError: (String) -> Unit = {}, onComplete: () -> Unit = {}) {
+        val me = auth.currentUser?.uid ?: run { onError("سجّل الدخول أولاً."); onComplete(); return }
+        val chatId = chatId(otherUid)
+        val fileRef = FirebaseStorage.getInstance().reference
+            .child("chat-media/$chatId/${UUID.randomUUID()}.jpg")
+        fileRef.putFile(uri)
+            .continueWithTask { task ->
+                if (!task.isSuccessful) throw (task.exception ?: Exception("فشل رفع الصورة."))
+                fileRef.downloadUrl
+            }
+            .addOnSuccessListener { downloadUri ->
+                val chat = db.collection("chats").document(chatId)
+                chat.set(mapOf(
+                    "members" to listOf(me, otherUid),
+                    "lastMessage" to "📷 صورة",
+                    "lastSenderId" to me,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                ), com.google.firebase.firestore.SetOptions.merge())
+                    .addOnSuccessListener {
+                        chat.collection("messages").add(hashMapOf(
+                            "senderId" to me,
+                            "text" to "صورة",
+                            "mediaUrl" to downloadUri.toString(),
+                            "type" to "image",
+                            "createdAt" to System.currentTimeMillis(),
+                            "deliveredTo" to emptyList<String>(),
+                            "readBy" to listOf(me)
+                        )).addOnFailureListener { onError(it.localizedMessage ?: "تعذر إرسال الصورة.") }
+                            .addOnCompleteListener { onComplete() }
+                    }.addOnFailureListener {
+                        onError(it.localizedMessage ?: "تعذر إنشاء المحادثة.")
+                        onComplete()
+                    }
+            }
+            .addOnFailureListener {
+                onError(it.localizedMessage ?: "تعذر رفع الصورة.")
+                onComplete()
+            }
     }
 
     fun markRead(otherUid: String) {
