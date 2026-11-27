@@ -2,12 +2,18 @@ package com.wisal.app
 
 import android.net.Uri
 import java.util.UUID
-import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import java.security.MessageDigest
+import com.google.firebase.FirebaseApp
+import android.os.Handler
+import android.os.Looper
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
 
 data class WisalUser(
     val uid: String = "",
@@ -138,49 +144,81 @@ object WisalMessaging {
             }.addOnFailureListener { onError(it.localizedMessage ?: "تعذر إنشاء المحادثة.") }
     }
 
-    fun sendImage(otherUid: String, uri: Uri, onError: (String) -> Unit = {}, onComplete: () -> Unit = {}) {
-        val me = auth.currentUser?.uid ?: run { onError("سجّل الدخول أولاً."); onComplete(); return }
-        val chatId = chatId(otherUid)
-        val chat = db.collection("chats").document(chatId)
-        chat.set(
-            mapOf(
-                "members" to listOf(me, otherUid),
-                "lastMessage" to "📷 صورة",
-                "lastSenderId" to me,
-                "updatedAt" to FieldValue.serverTimestamp()
-            ),
-            com.google.firebase.firestore.SetOptions.merge()
-        ).addOnSuccessListener {
-            val fileRef = FirebaseStorage.getInstance().reference
-                .child("chat-media/$chatId/${UUID.randomUUID()}.jpg")
-            fileRef.putFile(uri)
-                .continueWithTask { task ->
-                    if (!task.isSuccessful) throw (task.exception ?: Exception("فشل رفع الصورة."))
-                    fileRef.downloadUrl
+    private const val MEDIA_WORKER_BASE_URL = "https://SET-YOUR-WISAL-WORKER-URL.workers.dev"
+    private val mediaExecutor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private fun uploadToB2(
+        uri: Uri,
+        mimeType: String,
+        fileName: String,
+        onResult: (String?, String?) -> Unit
+    ) {
+        val user = auth.currentUser
+        if (user == null) { onResult(null, "سجّل الدخول أولاً."); return }
+        if (MEDIA_WORKER_BASE_URL.contains("SET-YOUR")) {
+            onResult(null, "لم يتم إعداد عنوان خادم تخزين وصال بعد.")
+            return
+        }
+        user.getIdToken(false).addOnSuccessListener { token ->
+            mediaExecutor.execute {
+                try {
+                    val context = FirebaseApp.getInstance().applicationContext
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: throw Exception("تعذر قراءة الملف المحدد.")
+                    if (bytes.isEmpty() || bytes.size > 25 * 1024 * 1024) {
+                        throw Exception("حجم الملف يجب أن يكون بين 1 بايت و25 ميغابايت.")
+                    }
+                    val ticketConnection = (URL("$MEDIA_WORKER_BASE_URL/v1/upload-ticket").openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 20000
+                        readTimeout = 30000
+                        doOutput = true
+                        setRequestProperty("Authorization", "Bearer ${token.token}")
+                        setRequestProperty("Content-Type", "application/json")
+                    }
+                    val ticketBody = JSONObject()
+                        .put("fileName", fileName)
+                        .put("mimeType", mimeType)
+                        .put("size", bytes.size)
+                        .toString()
+                    ticketConnection.outputStream.use { it.write(ticketBody.toByteArray(Charsets.UTF_8)) }
+                    val ticketCode = ticketConnection.responseCode
+                    val ticketText = (if (ticketCode in 200..299) ticketConnection.inputStream else ticketConnection.errorStream)
+                        ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    ticketConnection.disconnect()
+                    if (ticketCode !in 200..299) {
+                        val reason = runCatching { JSONObject(ticketText).optString("error") }.getOrNull()
+                        throw Exception(reason?.takeIf { it.isNotBlank() } ?: "تعذر الحصول على رابط رفع مؤقت.")
+                    }
+                    val ticket = JSONObject(ticketText)
+                    val uploadUrl = ticket.getString("uploadUrl")
+                    val mediaUrl = ticket.getString("mediaUrl")
+                    val uploadConnection = (URL(uploadUrl).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "PUT"
+                        connectTimeout = 30000
+                        readTimeout = 60000
+                        doOutput = true
+                        setFixedLengthStreamingMode(bytes.size)
+                        setRequestProperty("Content-Type", mimeType)
+                    }
+                    uploadConnection.outputStream.use { it.write(bytes) }
+                    val uploadCode = uploadConnection.responseCode
+                    uploadConnection.disconnect()
+                    if (uploadCode !in 200..299) throw Exception("فشل رفع الملف إلى Backblaze (HTTP $uploadCode).")
+                    mainHandler.post { onResult(mediaUrl, null) }
+                } catch (error: Exception) {
+                    mainHandler.post { onResult(null, error.localizedMessage ?: "تعذر رفع الملف.") }
                 }
-                .addOnSuccessListener { downloadUri ->
-                    chat.collection("messages").add(hashMapOf(
-                        "senderId" to me,
-                        "text" to "صورة",
-                        "mediaUrl" to downloadUri.toString(),
-                        "type" to "image",
-                        "createdAt" to System.currentTimeMillis(),
-                        "deliveredTo" to emptyList<String>(),
-                        "readBy" to listOf(me)
-                    )).addOnFailureListener {
-                        onError(it.localizedMessage ?: "تعذر إرسال الصورة.")
-                    }.addOnCompleteListener { onComplete() }
-                }
-                .addOnFailureListener {
-                    onError(it.localizedMessage ?: "تعذر رفع الصورة.")
-                    onComplete()
-                }
-        }.addOnFailureListener {
-            onError(it.localizedMessage ?: "تعذر إنشاء المحادثة.")
-            onComplete()
+            }
+        }.addOnFailureListener { error ->
+            onResult(null, error.localizedMessage ?: "تعذر الحصول على رمز تسجيل الدخول.")
         }
     }
 
+    fun sendImage(otherUid: String, uri: Uri, onError: (String) -> Unit = {}, onComplete: () -> Unit = {}) {
+        sendAttachment(otherUid, uri, "image/jpeg", "image.jpg", onError, onComplete)
+    }
 
     fun sendAttachment(
         otherUid: String,
@@ -194,7 +232,6 @@ object WisalMessaging {
         val conversationId = chatId(otherUid)
         val chat = db.collection("chats").document(conversationId)
         val safeName = fileName.ifBlank { "attachment" }.replace(Regex("[^A-Za-z0-9._-]"), "_").take(100)
-        val extension = safeName.substringAfterLast('.', "bin").take(10)
         val kind = when {
             mimeType.startsWith("image/") -> "image"
             mimeType.startsWith("video/") -> "video"
@@ -212,26 +249,25 @@ object WisalMessaging {
                 "lastSenderId" to me, "updatedAt" to FieldValue.serverTimestamp()),
             com.google.firebase.firestore.SetOptions.merge()
         ).addOnSuccessListener {
-            val storageRef = FirebaseStorage.getInstance().reference
-                .child("chat-media/$conversationId/${UUID.randomUUID()}.$extension")
-            storageRef.putFile(uri)
-                .continueWithTask { task ->
-                    if (!task.isSuccessful) throw (task.exception ?: Exception("فشل رفع المرفق."))
-                    storageRef.downloadUrl
+            uploadToB2(uri, mimeType, safeName) { mediaUrl, problem ->
+                if (mediaUrl == null) {
+                    onError(problem ?: "تعذر رفع المرفق.")
+                    onComplete()
+                    return@uploadToB2
                 }
-                .addOnSuccessListener { download ->
-                    chat.collection("messages").add(hashMapOf(
-                        "senderId" to me, "text" to preview, "mediaUrl" to download.toString(),
-                        "fileName" to fileName, "type" to kind,
-                        "createdAt" to System.currentTimeMillis(),
-                        "deliveredTo" to emptyList<String>(), "readBy" to listOf(me)
-                    )).addOnFailureListener { onError(it.localizedMessage ?: "تعذر إرسال المرفق.") }
-                        .addOnCompleteListener { onComplete() }
-                }
-                .addOnFailureListener { onError(it.localizedMessage ?: "تعذر رفع المرفق."); onComplete() }
-        }.addOnFailureListener { onError(it.localizedMessage ?: "تعذر إنشاء المحادثة."); onComplete() }
+                chat.collection("messages").add(hashMapOf(
+                    "senderId" to me, "text" to preview, "mediaUrl" to mediaUrl,
+                    "fileName" to fileName, "type" to kind,
+                    "createdAt" to System.currentTimeMillis(),
+                    "deliveredTo" to emptyList<String>(), "readBy" to listOf(me)
+                )).addOnFailureListener { onError(it.localizedMessage ?: "تعذر إرسال المرفق.") }
+                    .addOnCompleteListener { onComplete() }
+            }
+        }.addOnFailureListener {
+            onError(it.localizedMessage ?: "تعذر إنشاء المحادثة.")
+            onComplete()
+        }
     }
-
 
     fun createGroup(name: String, onResult: (WisalGroup?, String?) -> Unit) {
         val me = auth.currentUser?.uid ?: run { onResult(null, "سجّل الدخول أولاً."); return }
