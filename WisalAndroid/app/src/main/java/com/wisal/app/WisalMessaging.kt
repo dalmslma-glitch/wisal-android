@@ -41,7 +41,8 @@ object WisalMessaging {
         val data = hashMapOf(
             "uid" to user.uid,
             "phone" to (user.phoneNumber ?: ""),
-            "displayName" to displayName,
+            "email" to (user.email ?: ""),
+            "displayName" to (displayName.ifBlank { user.displayName ?: "" }),
             "updatedAt" to FieldValue.serverTimestamp()
         )
         db.collection("users").document(user.uid).set(data, com.google.firebase.firestore.SetOptions.merge())
