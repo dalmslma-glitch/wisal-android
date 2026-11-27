@@ -159,7 +159,7 @@ fun StatusStrip() {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(54.dp)) {
                     Box(Modifier.size(50.dp).background(Gold, CircleShape).padding(2.dp), contentAlignment = Alignment.Center) {
                         if (index == 0) Text("+", color = Gold, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-                        else WisalPosterImage("AVATAR_PROFILE", Modifier.fillMaxSize().clip(CircleShape), ContentScale.Crop)
+                        else WisalPosterImage(listOf("AVATAR_MARYAM", "AVATAR_SAIF", "AVATAR_AHMED", "AVATAR_LINA")[index - 1], Modifier.fillMaxSize().clip(CircleShape), ContentScale.Crop)
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(label, color = Color.LightGray, fontSize = 10.sp, maxLines = 1)
@@ -175,7 +175,7 @@ fun ChatRow(person: Person, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(person.initials, 52)
+        AvatarFor(person.name, 52)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(person.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
@@ -194,6 +194,20 @@ fun ChatRow(person: Person, onClick: () -> Unit) {
 }
 
 @Composable
+fun AvatarFor(name: String, size: Int = 48) {
+    val asset = when (name) {
+        "أحمد محمد" -> "AVATAR_AHMED"
+        "سارة" -> "AVATAR_LINA"
+        "خالد" -> "AVATAR_SAIF"
+        "مجموعة الأصدقاء" -> "GROUP_ICON"
+        else -> "AVATAR_PROFILE"
+    }
+    Box(Modifier.size(size.dp).background(Gold, CircleShape).padding(2.dp)) {
+        WisalPosterImage(asset, Modifier.fillMaxSize().clip(CircleShape), ContentScale.Crop)
+    }
+}
+
+@Composable
 fun Avatar(text: String, size: Int = 48) {
     Box(Modifier.size(size.dp).background(Gold, CircleShape).padding(2.dp), contentAlignment = Alignment.Center) {
         WisalPosterImage(if (text == "مج") "GROUP_ICON" else "AVATAR_PROFILE", Modifier.fillMaxSize().clip(CircleShape), ContentScale.Crop)
@@ -207,7 +221,7 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Color(0xFF101010))) {
         Row(Modifier.fillMaxWidth().background(Color(0xFF090909)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, null, tint = Color.White) }
-            Avatar(person.initials, 40)
+            AvatarFor(person.name, 40)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(person.name, color = Gold, fontWeight = FontWeight.Bold)
@@ -265,7 +279,7 @@ fun StatusPage() {
         WisalPosterImage("MOSQUE_STORY", Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(18.dp)), ContentScale.Crop)
         Spacer(Modifier.height(18.dp))
         people.take(3).forEach { Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.background(Gold, CircleShape).padding(3.dp)) { Avatar(it.initials, 48) }
+            Box(Modifier.background(Gold, CircleShape).padding(3.dp)) { AvatarFor(it.name, 48) }
             Spacer(Modifier.width(12.dp)); Column { Text(it.name, color = Ink, fontWeight = FontWeight.Bold); Text("منذ قليل", color = Muted, fontSize = 12.sp) }
         } }
     }
