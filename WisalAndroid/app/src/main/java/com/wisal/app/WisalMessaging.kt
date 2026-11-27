@@ -22,6 +22,7 @@ data class WisalMessage(
     val senderId: String = "",
     val text: String = "",
     val mediaUrl: String = "",
+    val fileName: String = "",
     val createdAt: Long = 0L,
     val deliveredTo: List<String> = emptyList(),
     val readBy: List<String> = emptyList(),
@@ -176,6 +177,57 @@ object WisalMessaging {
             onError(it.localizedMessage ?: "تعذر إنشاء المحادثة.")
             onComplete()
         }
+    }
+
+
+    fun sendAttachment(
+        otherUid: String,
+        uri: Uri,
+        mimeType: String,
+        fileName: String,
+        onError: (String) -> Unit = {},
+        onComplete: () -> Unit = {}
+    ) {
+        val me = auth.currentUser?.uid ?: run { onError("سجّل الدخول أولاً."); onComplete(); return }
+        val conversationId = chatId(otherUid)
+        val chat = db.collection("chats").document(conversationId)
+        val safeName = fileName.ifBlank { "attachment" }.replace(Regex("[^A-Za-z0-9._-]"), "_").take(100)
+        val extension = safeName.substringAfterLast('.', "bin").take(10)
+        val kind = when {
+            mimeType.startsWith("image/") -> "image"
+            mimeType.startsWith("video/") -> "video"
+            mimeType.startsWith("audio/") -> "audio"
+            else -> "file"
+        }
+        val preview = when (kind) {
+            "image" -> "📷 صورة"
+            "video" -> "🎬 فيديو"
+            "audio" -> "🎵 مقطع صوتي"
+            else -> "📎 $fileName"
+        }
+        chat.set(
+            mapOf("members" to listOf(me, otherUid), "lastMessage" to preview,
+                "lastSenderId" to me, "updatedAt" to FieldValue.serverTimestamp()),
+            com.google.firebase.firestore.SetOptions.merge()
+        ).addOnSuccessListener {
+            val storageRef = FirebaseStorage.getInstance().reference
+                .child("chat-media/$conversationId/${UUID.randomUUID()}.$extension")
+            storageRef.putFile(uri)
+                .continueWithTask { task ->
+                    if (!task.isSuccessful) throw (task.exception ?: Exception("فشل رفع المرفق."))
+                    storageRef.downloadUrl
+                }
+                .addOnSuccessListener { download ->
+                    chat.collection("messages").add(hashMapOf(
+                        "senderId" to me, "text" to preview, "mediaUrl" to download.toString(),
+                        "fileName" to fileName, "type" to kind,
+                        "createdAt" to System.currentTimeMillis(),
+                        "deliveredTo" to emptyList<String>(), "readBy" to listOf(me)
+                    )).addOnFailureListener { onError(it.localizedMessage ?: "تعذر إرسال المرفق.") }
+                        .addOnCompleteListener { onComplete() }
+                }
+                .addOnFailureListener { onError(it.localizedMessage ?: "تعذر رفع المرفق."); onComplete() }
+        }.addOnFailureListener { onError(it.localizedMessage ?: "تعذر إنشاء المحادثة."); onComplete() }
     }
 
     fun markRead(otherUid: String) {
