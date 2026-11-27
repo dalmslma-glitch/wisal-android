@@ -47,7 +47,10 @@ private val people = listOf(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { if (FirebaseAuth.getInstance().currentUser != null) WisalApp() else PhoneAuthScreen() }
+        setContent {
+            var signedIn by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser != null) }
+            if (signedIn) WisalApp() else PhoneAuthScreen(onSignedIn = { signedIn = true })
+        }
     }
 }
 
