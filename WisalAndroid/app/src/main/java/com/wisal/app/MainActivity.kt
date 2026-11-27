@@ -1,6 +1,7 @@
 package com.wisal.app
 
 import android.os.Bundle
+import android.widget.Toast
 import android.os.Build
 import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
@@ -61,7 +62,14 @@ class MainActivity : ComponentActivity() {
             var signedIn by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser != null) }
             LaunchedEffect(signedIn) {
                 if (signedIn) {
-                    WisalMessaging.saveMyProfile()
+                    WisalMessaging.saveMyProfile(onResult = { success, error ->
+                        val message = if (success) {
+                            "تم حفظ حسابك في وصال بنجاح."
+                        } else {
+                            "تعذر حفظ حسابك: ${error ?: "خطأ غير معروف"}"
+                        }
+                        Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                    })
                     FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
                         FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
                             com.google.firebase.firestore.FirebaseFirestore.getInstance()
