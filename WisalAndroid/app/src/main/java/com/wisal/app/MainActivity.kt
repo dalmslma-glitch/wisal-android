@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
+import com.google.firebase.auth.FirebaseAuth
 
 private val Navy = Color(0xFF090909)
 private val Navy2 = Color(0xFFFF8A00)
@@ -46,7 +47,7 @@ private val people = listOf(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { WisalApp() }
+        setContent { if (FirebaseAuth.getInstance().currentUser != null) WisalApp() else PhoneAuthScreen() }
     }
 }
 
