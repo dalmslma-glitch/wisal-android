@@ -1,6 +1,8 @@
 package com.wisal.app
 
 import android.os.Bundle
+import android.content.Intent
+import android.provider.OpenableColumns
 import android.widget.Toast
 import android.os.Build
 import android.content.pm.PackageManager
@@ -25,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -257,12 +260,17 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
     var cloudMessages by remember(person.uid) { mutableStateOf(emptyList<WisalMessage>()) }
     var sendError by remember { mutableStateOf("") }
     var uploadingImage by remember { mutableStateOf(false) }
+    var showAttachmentOptions by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val emojiPickerVisible = remember { mutableStateOf(false) }
     val myUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null && person.uid != null) {
             uploadingImage = true
-            WisalMessaging.sendImage(person.uid, uri,
+            val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+            val fileName = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null } ?: "مرفق"
+            WisalMessaging.sendAttachment(person.uid, uri, mime, fileName,
                 onError = { sendError = it },
                 onComplete = { uploadingImage = false }
             )
@@ -318,6 +326,15 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
                                         contentScale = ContentScale.Fit,
                                         crossfade = true
                                     )
+                                } else if (item.mediaUrl.isNotBlank()) {
+                                    TextButton(onClick = {
+                                        runCatching {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW).setData(android.net.Uri.parse(item.mediaUrl)))
+                                        }.onFailure { sendError = "لا يوجد تطبيق مناسب لفتح هذا المرفق." }
+                                    }) {
+                                        Icon(Icons.Default.AttachFile, null, tint = Gold)
+                                        Text(item.fileName.ifBlank { item.text }, color = Color.White)
+                                    }
                                 } else {
                                     Text(item.text, color = Color.White, fontSize = 14.sp)
                                 }
@@ -345,7 +362,7 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
             IconButton(onClick = { emojiPickerVisible.value = !emojiPickerVisible.value }) { Icon(Icons.Default.EmojiEmotions, null, tint = Gold) }
             IconButton(onClick = {
                 if (person.uid == null) sendError = "ابدأ محادثة حقيقية أولاً."
-                else imagePicker.launch("image/*")
+                else showAttachmentOptions = true
             }, enabled = !uploadingImage) {
                 if (uploadingImage) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Gold)
                 else Icon(Icons.Default.AttachFile, null, tint = Gold)
@@ -369,6 +386,26 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
                     message = ""
                 }
             }) { Icon(Icons.Default.Send, null, tint = Gold) }
+        }
+        if (showAttachmentOptions) {
+            AlertDialog(
+                onDismissRequest = { showAttachmentOptions = false },
+                title = { Text("إرفاق محتوى", color = Color.White) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("صورة" to "image/*", "فيديو" to "video/*", "صوت" to "audio/*", "ملف أو مستند" to "*/*").forEach { (label, mime) ->
+                            TextButton(onClick = {
+                                showAttachmentOptions = false
+                                attachmentPicker.launch(mime)
+                            }, modifier = Modifier.fillMaxWidth()) {
+                                Text(label, color = Gold)
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showAttachmentOptions = false }) { Text("إغلاق", color = Gold) } },
+                containerColor = Panel
+            )
         }
         if (emojiPickerVisible.value) {
             Row(Modifier.fillMaxWidth().background(Panel).padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
