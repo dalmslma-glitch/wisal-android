@@ -532,6 +532,9 @@ fun GroupChatScreen(group: WisalGroup, onBack: () -> Unit) {
     var messages by remember(group.id) { mutableStateOf(emptyList<WisalMessage>()) }
     var draft by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
+    var showInvite by remember { mutableStateOf(false) }
+    var inviteUid by remember { mutableStateOf("") }
+    var inviteMessage by remember { mutableStateOf("") }
     val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
     DisposableEffect(group.id) {
         val stop = WisalMessaging.observeGroupMessages(group.id, { messages = it }, { error = it })
@@ -542,9 +545,12 @@ fun GroupChatScreen(group: WisalGroup, onBack: () -> Unit) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, null, tint = Color.White) }
             Avatar("مج", 40)
             Spacer(Modifier.width(10.dp))
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text(group.name, color = Gold, fontWeight = FontWeight.Bold)
                 Text("${group.members.size} عضو", color = Muted, fontSize = 11.sp)
+            }
+            if (group.createdBy == uid) {
+                IconButton(onClick = { showInvite = true }) { Icon(Icons.Default.PersonAdd, null, tint = Gold) }
             }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
@@ -570,6 +576,29 @@ fun GroupChatScreen(group: WisalGroup, onBack: () -> Unit) {
                 }
             }) { Icon(Icons.Default.Send, null, tint = Gold) }
         }
+    }
+    if (showInvite) {
+        AlertDialog(
+            onDismissRequest = { showInvite = false },
+            title = { Text("إضافة عضو", color = Color.White) },
+            text = {
+                Column {
+                    Text("أدخل معرّف حساب وصال (UID) للشخص الذي تريد إضافته.", color = Muted, fontSize = 12.sp)
+                    OutlinedTextField(value = inviteUid, onValueChange = { inviteUid = it.trim() }, label = { Text("معرّف الحساب") }, singleLine = true)
+                    if (inviteMessage.isNotBlank()) Text(inviteMessage, color = Gold, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    WisalMessaging.addGroupMember(group.id, inviteUid) { ok, problem ->
+                        inviteMessage = if (ok) "تمت إضافة العضو." else (problem ?: "تعذرت الإضافة.")
+                        if (ok) inviteUid = ""
+                    }
+                }) { Text("إضافة", color = Gold) }
+            },
+            dismissButton = { TextButton(onClick = { showInvite = false }) { Text("إغلاق", color = Muted) } },
+            containerColor = Panel
+        )
     }
 }
 
