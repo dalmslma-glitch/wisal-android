@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.os.Build
 import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import coil.compose.AsyncImage
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -243,8 +246,18 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
     var sent by remember { mutableStateOf(listOf<String>()) }
     var cloudMessages by remember(person.uid) { mutableStateOf(emptyList<WisalMessage>()) }
     var sendError by remember { mutableStateOf("") }
+    var uploadingImage by remember { mutableStateOf(false) }
     val emojiPickerVisible = remember { mutableStateOf(false) }
     val myUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null && person.uid != null) {
+            uploadingImage = true
+            WisalMessaging.sendImage(person.uid, uri,
+                onError = { sendError = it },
+                onComplete = { uploadingImage = false }
+            )
+        }
+    }
 
     DisposableEffect(person.uid) {
         val otherUid = person.uid
@@ -287,7 +300,15 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
                             shape = RoundedCornerShape(16.dp), shadowElevation = 1.dp
                         ) {
                             Column(Modifier.padding(horizontal = 13.dp, vertical = 8.dp)) {
-                                Text(item.text, color = Color.White, fontSize = 14.sp)
+                                if (item.type == "image" && item.mediaUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = item.mediaUrl,
+                                        contentDescription = "صورة مرسلة",
+                                        modifier = Modifier.sizeIn(maxWidth = 220.dp, maxHeight = 260.dp)
+                                    )
+                                } else {
+                                    Text(item.text, color = Color.White, fontSize = 14.sp)
+                                }
                                 if (mine) {
                                     val delivered = item.deliveredTo.isNotEmpty()
                                     val read = item.readBy.any { it != myUid }
@@ -310,8 +331,12 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
         }
         Row(Modifier.fillMaxWidth().background(Color(0xFF111B2B)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { emojiPickerVisible.value = !emojiPickerVisible.value }) { Icon(Icons.Default.EmojiEmotions, null, tint = Gold) }
-            IconButton(onClick = { sendError = "رفع الصور والملفات يحتاج تفعيل Firebase Storage وربطه بواجهة الإرفاق." }) {
-                Icon(Icons.Default.AttachFile, null, tint = Gold)
+            IconButton(onClick = {
+                if (person.uid == null) sendError = "ابدأ محادثة حقيقية أولاً."
+                else imagePicker.launch("image/*")
+            }, enabled = !uploadingImage) {
+                if (uploadingImage) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Gold)
+                else Icon(Icons.Default.AttachFile, null, tint = Gold)
             }
             OutlinedTextField(
                 value = message, onValueChange = { message = it; sendError = "" },
