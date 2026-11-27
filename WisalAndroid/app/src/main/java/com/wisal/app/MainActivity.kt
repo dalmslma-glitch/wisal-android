@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            if (signedIn) WisalApp() else PhoneAuthScreen(onSignedIn = { signedIn = true })
+            if (signedIn) WisalApp() else WisalAuthScreen(onSignedIn = { signedIn = true })
         }
     }
 }
@@ -422,50 +422,19 @@ fun GroupsPage() {
 
 @Composable
 fun ContactsPage(onOpen: (Person) -> Unit) {
-    var phone by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf("أدخل رقم هاتف الشخص مع مفتاح الدولة للعثور على حسابه في وصال.") }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(Modifier.fillMaxSize().padding(20.dp)) {
         Text("ابدأ محادثة جديدة", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text("لا توجد اقتراحات غرباء؛ ابحث فقط عن جهة اتصال تعرف رقمها.", color = Muted, fontSize = 12.sp)
-        Spacer(Modifier.height(14.dp))
-        OutlinedTextField(
-            value = phone, onValueChange = { phone = it },
-            modifier = Modifier.fillMaxWidth(), singleLine = true,
-            label = { Text("رقم الهاتف الدولي مثل +905...") },
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Gold, unfocusedBorderColor = Muted)
-        )
         Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = {
-                loading = true
-                message = ""
-                com.google.firebase.functions.FirebaseFunctions.getInstance()
-                    .getHttpsCallable("lookupUserByPhone")
-                    .call(mapOf("phone" to phone.trim()))
-                    .addOnSuccessListener { result ->
-                        loading = false
-                        val data = result.getData() as? Map<*, *>
-                        val uid = data?.get("uid") as? String
-                        val name = data?.get("displayName") as? String ?: "جهة اتصال وصال"
-                        if (uid.isNullOrBlank()) message = "لم نعثر على حساب بهذا الرقم."
-                        else onOpen(Person(name, "ابدأ المحادثة", "", name.take(1), uid = uid))
-                    }
-                    .addOnFailureListener {
-                        loading = false
-                        message = it.localizedMessage ?: "تعذر البحث. تحقق من اتصال الإنترنت."
-                    }
-            },
-            modifier = Modifier.fillMaxWidth(), enabled = !loading && phone.isNotBlank(),
-            colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black)
-        ) {
-            if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black)
-            else Text("بحث عن الحساب")
+        Text("وصال لا يقترح أشخاصاً مجهولين. أضف جهة اتصال تعرفها باستخدام رابط دعوة أو رمز مشاركة عندما تتوفر هذه الميزة.", color = Muted, fontSize = 13.sp)
+        Spacer(Modifier.height(18.dp))
+        Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Icon(Icons.Default.People, contentDescription = null, tint = Gold, modifier = Modifier.size(30.dp))
+                Spacer(Modifier.height(8.dp))
+                Text("البحث عن الحسابات قيد التجهيز", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("البحث الآمن عن مستخدمين يحتاج إلى خدمة خادم. أوقفناه مؤقتاً حتى يبقى التطبيق متوافقاً مع خطة Firebase المجانية ولا نكشف بيانات المستخدمين.", color = Muted, fontSize = 12.sp)
+            }
         }
-        Spacer(Modifier.height(12.dp))
-        Text(message, color = Muted, fontSize = 12.sp)
     }
 }
 
