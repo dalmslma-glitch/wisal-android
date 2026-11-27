@@ -120,41 +120,44 @@ object WisalMessaging {
     fun sendImage(otherUid: String, uri: Uri, onError: (String) -> Unit = {}, onComplete: () -> Unit = {}) {
         val me = auth.currentUser?.uid ?: run { onError("سجّل الدخول أولاً."); onComplete(); return }
         val chatId = chatId(otherUid)
-        val fileRef = FirebaseStorage.getInstance().reference
-            .child("chat-media/$chatId/${UUID.randomUUID()}.jpg")
-        fileRef.putFile(uri)
-            .continueWithTask { task ->
-                if (!task.isSuccessful) throw (task.exception ?: Exception("فشل رفع الصورة."))
-                fileRef.downloadUrl
-            }
-            .addOnSuccessListener { downloadUri ->
-                val chat = db.collection("chats").document(chatId)
-                chat.set(mapOf(
-                    "members" to listOf(me, otherUid),
-                    "lastMessage" to "📷 صورة",
-                    "lastSenderId" to me,
-                    "updatedAt" to FieldValue.serverTimestamp()
-                ), com.google.firebase.firestore.SetOptions.merge())
-                    .addOnSuccessListener {
-                        chat.collection("messages").add(hashMapOf(
-                            "senderId" to me,
-                            "text" to "صورة",
-                            "mediaUrl" to downloadUri.toString(),
-                            "type" to "image",
-                            "createdAt" to System.currentTimeMillis(),
-                            "deliveredTo" to emptyList<String>(),
-                            "readBy" to listOf(me)
-                        )).addOnFailureListener { onError(it.localizedMessage ?: "تعذر إرسال الصورة.") }
-                            .addOnCompleteListener { onComplete() }
-                    }.addOnFailureListener {
-                        onError(it.localizedMessage ?: "تعذر إنشاء المحادثة.")
-                        onComplete()
-                    }
-            }
-            .addOnFailureListener {
-                onError(it.localizedMessage ?: "تعذر رفع الصورة.")
-                onComplete()
-            }
+        val chat = db.collection("chats").document(chatId)
+        chat.set(
+            mapOf(
+                "members" to listOf(me, otherUid),
+                "lastMessage" to "📷 صورة",
+                "lastSenderId" to me,
+                "updatedAt" to FieldValue.serverTimestamp()
+            ),
+            com.google.firebase.firestore.SetOptions.merge()
+        ).addOnSuccessListener {
+            val fileRef = FirebaseStorage.getInstance().reference
+                .child("chat-media/$chatId/${UUID.randomUUID()}.jpg")
+            fileRef.putFile(uri)
+                .continueWithTask { task ->
+                    if (!task.isSuccessful) throw (task.exception ?: Exception("فشل رفع الصورة."))
+                    fileRef.downloadUrl
+                }
+                .addOnSuccessListener { downloadUri ->
+                    chat.collection("messages").add(hashMapOf(
+                        "senderId" to me,
+                        "text" to "صورة",
+                        "mediaUrl" to downloadUri.toString(),
+                        "type" to "image",
+                        "createdAt" to System.currentTimeMillis(),
+                        "deliveredTo" to emptyList<String>(),
+                        "readBy" to listOf(me)
+                    )).addOnFailureListener {
+                        onError(it.localizedMessage ?: "تعذر إرسال الصورة.")
+                    }.addOnCompleteListener { onComplete() }
+                }
+                .addOnFailureListener {
+                    onError(it.localizedMessage ?: "تعذر رفع الصورة.")
+                    onComplete()
+                }
+        }.addOnFailureListener {
+            onError(it.localizedMessage ?: "تعذر إنشاء المحادثة.")
+            onComplete()
+        }
     }
 
     fun markRead(otherUid: String) {
