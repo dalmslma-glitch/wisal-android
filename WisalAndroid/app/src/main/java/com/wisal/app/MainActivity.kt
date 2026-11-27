@@ -91,6 +91,7 @@ class MainActivity : ComponentActivity() {
 fun WisalApp(onSignOut: () -> Unit) {
     var tab by remember { mutableStateOf("الدردشات") }
     var selected by remember { mutableStateOf<Person?>(null) }
+    var selectedGroup by remember { mutableStateOf<WisalGroup?>(null) }
     var showSplash by remember { mutableStateOf(true) }
     var showSettings by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(1600); showSplash = false }
@@ -102,6 +103,8 @@ fun WisalApp(onSignOut: () -> Unit) {
                 }
             } else if (selected != null) {
                 ChatScreen(person = selected!!, onBack = { selected = null })
+            } else if (selectedGroup != null) {
+                GroupChatScreen(group = selectedGroup!!, onBack = { selectedGroup = null })
             } else {
                 Scaffold(
                     containerColor = Cream,
@@ -135,7 +138,7 @@ fun WisalApp(onSignOut: () -> Unit) {
                         when (tab) {
                             "الدردشات" -> Chats { selected = it }
                             "الحالات" -> StatusPage()
-                            "المجموعات" -> GroupsPage()
+                            "المجموعات" -> GroupsPage(onOpen = { selectedGroup = it })
                             "جهات الاتصال" -> ContactsPage { selected = it }
                             else -> ProfilePage()
                         }
@@ -462,13 +465,110 @@ fun StatusPage() {
 }
 
 @Composable
-fun GroupsPage() {
+fun GroupsPage(onOpen: (WisalGroup) -> Unit) {
+    var groups by remember { mutableStateOf(emptyList<WisalGroup>()) }
+    var error by remember { mutableStateOf("") }
+    var showCreate by remember { mutableStateOf(false) }
+    var groupName by remember { mutableStateOf("") }
+    var creating by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        val stop = WisalMessaging.observeMyGroups({ groups = it }, { error = it })
+        onDispose { stop() }
+    }
     Column(Modifier.fillMaxSize().padding(18.dp)) {
-        Text("مجموعات وصال", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        listOf("العائلة", "الأصدقاء", "مجتمع وصال").forEach {
-            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Avatar("مج", 48); Spacer(Modifier.width(12.dp)); Text(it, color = Ink, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("مجموعات وصال", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("مجموعاتك ومحادثاتها", color = Muted, fontSize = 12.sp)
             }
+            Button(onClick = { showCreate = true }, colors = ButtonDefaults.buttonColors(containerColor = Gold)) {
+                Icon(Icons.Default.Add, null, tint = Color.Black)
+                Text("إنشاء", color = Color.Black)
+            }
+        }
+        if (error.isNotBlank()) Text(error, color = Color(0xFFFFB4AB), fontSize = 12.sp)
+        if (groups.isEmpty()) {
+            Spacer(Modifier.height(28.dp))
+            Text("لا توجد مجموعات بعد. أنشئ مجموعة جديدة للبدء.", color = Muted)
+        } else {
+            LazyColumn {
+                items(groups, key = { it.id }) { group ->
+                    Row(Modifier.fillMaxWidth().clickable { onOpen(group) }.padding(vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Avatar("مج", 48)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(group.name, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(group.lastMessage.ifBlank { "مجموعة جديدة" }, color = Muted, fontSize = 12.sp, maxLines = 1)
+                        }
+                        Text("${group.members.size} عضو", color = Muted, fontSize = 11.sp)
+                    }
+                    HorizontalDivider(color = Color(0xFF292929))
+                }
+            }
+        }
+    }
+    if (showCreate) {
+        AlertDialog(
+            onDismissRequest = { if (!creating) showCreate = false },
+            title = { Text("إنشاء مجموعة", color = Color.White) },
+            text = { OutlinedTextField(value = groupName, onValueChange = { groupName = it.take(60) }, label = { Text("اسم المجموعة") }, singleLine = true) },
+            confirmButton = {
+                TextButton(enabled = !creating, onClick = {
+                    creating = true
+                    WisalMessaging.createGroup(groupName) { _, problem ->
+                        creating = false
+                        if (problem == null) { groupName = ""; showCreate = false } else error = problem
+                    }
+                }) { Text(if (creating) "جارٍ الإنشاء..." else "إنشاء", color = Gold) }
+            },
+            dismissButton = { TextButton(onClick = { showCreate = false }) { Text("إلغاء", color = Muted) } },
+            containerColor = Panel
+        )
+    }
+}
+
+@Composable
+fun GroupChatScreen(group: WisalGroup, onBack: () -> Unit) {
+    var messages by remember(group.id) { mutableStateOf(emptyList<WisalMessage>()) }
+    var draft by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+    DisposableEffect(group.id) {
+        val stop = WisalMessaging.observeGroupMessages(group.id, { messages = it }, { error = it })
+        onDispose { stop() }
+    }
+    Column(Modifier.fillMaxSize().background(Color(0xFF101827))) {
+        Row(Modifier.fillMaxWidth().background(Color(0xFF111B2B)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, null, tint = Color.White) }
+            Avatar("مج", 40)
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(group.name, color = Gold, fontWeight = FontWeight.Bold)
+                Text("${group.members.size} عضو", color = Muted, fontSize = 11.sp)
+            }
+        }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
+            items(messages, key = { it.id }) { msg ->
+                val mine = msg.senderId == uid
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.Start else Alignment.End) {
+                    Text(if (mine) "أنت" else "عضو", color = Gold, fontSize = 10.sp)
+                    Surface(color = if (mine) Color(0xFF234B43) else Panel, shape = RoundedCornerShape(14.dp)) {
+                        Text(msg.text, Modifier.padding(12.dp), color = Color.White)
+                    }
+                }
+                Spacer(Modifier.height(7.dp))
+            }
+        }
+        if (error.isNotBlank()) Text(error, color = Color(0xFFFFB4AB), fontSize = 11.sp)
+        Row(Modifier.fillMaxWidth().background(Color(0xFF111B2B)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(value = draft, onValueChange = { draft = it }, modifier = Modifier.weight(1f), placeholder = { Text("اكتب رسالة للمجموعة...") }, singleLine = true)
+            IconButton(onClick = {
+                if (draft.isNotBlank()) {
+                    val outgoing = draft
+                    WisalMessaging.sendGroupText(group.id, outgoing) { error = it }
+                    draft = ""
+                }
+            }) { Icon(Icons.Default.Send, null, tint = Gold) }
         }
     }
 }
