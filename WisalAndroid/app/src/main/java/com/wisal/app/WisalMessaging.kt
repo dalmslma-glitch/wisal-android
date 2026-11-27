@@ -260,6 +260,23 @@ object WisalMessaging {
         return { registration.remove() }
     }
 
+
+    fun addGroupMember(groupId: String, memberUid: String, onResult: (Boolean, String?) -> Unit) {
+        val me = auth.currentUser?.uid ?: run { onResult(false, "سجّل الدخول أولاً."); return }
+        val target = memberUid.trim()
+        if (target.isBlank() || target == me) { onResult(false, "أدخل معرّف حساب عضو آخر."); return }
+        db.collection("groups").document(groupId).get().addOnSuccessListener { snap ->
+            if (!snap.exists()) { onResult(false, "المجموعة غير موجودة."); return@addOnSuccessListener }
+            if (snap.getString("createdBy") != me) { onResult(false, "منشئ المجموعة فقط يستطيع إضافة الأعضاء حالياً."); return@addOnSuccessListener }
+            val members = snap.get("members") as? List<String> ?: emptyList()
+            if (target in members) { onResult(false, "هذا الحساب عضو بالفعل."); return@addOnSuccessListener }
+            if (members.size >= 100) { onResult(false, "وصلت المجموعة إلى الحد الأقصى للأعضاء."); return@addOnSuccessListener }
+            db.collection("groups").document(groupId).update("members", members + target)
+                .addOnSuccessListener { onResult(true, null) }
+                .addOnFailureListener { onResult(false, it.localizedMessage ?: "تعذرت إضافة العضو. انشر قواعد Firestore المحدّثة.") }
+        }.addOnFailureListener { onResult(false, it.localizedMessage ?: "تعذر قراءة المجموعة.") }
+    }
+
     fun sendGroupText(groupId: String, text: String, onError: (String) -> Unit = {}) {
         val me = auth.currentUser?.uid ?: run { onError("سجّل الدخول أولاً."); return }
         val clean = text.trim()
