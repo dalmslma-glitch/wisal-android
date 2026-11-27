@@ -243,6 +243,7 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
     var sent by remember { mutableStateOf(listOf<String>()) }
     var cloudMessages by remember(person.uid) { mutableStateOf(emptyList<WisalMessage>()) }
     var sendError by remember { mutableStateOf("") }
+    var showEmoji by remember { mutableStateOf(false) }
     val myUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
 
     DisposableEffect(person.uid) {
@@ -308,7 +309,6 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
             Text(sendError, color = Color(0xFFFFB4AB), modifier = Modifier.padding(horizontal = 12.dp), fontSize = 11.sp)
         }
         Row(Modifier.fillMaxWidth().background(Color(0xFF111B2B)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            var showEmoji by remember { mutableStateOf(false) }
             IconButton(onClick = { showEmoji = !showEmoji }) { Icon(Icons.Default.EmojiEmotions, null, tint = Gold) }
             IconButton(onClick = { sendError = "رفع الصور والملفات يحتاج تفعيل Firebase Storage وربطه بواجهة الإرفاق." }) {
                 Icon(Icons.Default.AttachFile, null, tint = Gold)
