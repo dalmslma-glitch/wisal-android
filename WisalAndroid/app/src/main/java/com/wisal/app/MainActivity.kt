@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 
 private val Navy = Color(0xFF090909)
 private val Navy2 = Color(0xFFFF8A00)
@@ -50,9 +54,15 @@ class MainActivity : ComponentActivity() {
 fun WisalApp() {
     var tab by remember { mutableStateOf("الدردشات") }
     var selected by remember { mutableStateOf<Person?>(null) }
+    var showSplash by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { delay(1600); showSplash = false }
     MaterialTheme(colorScheme = darkColorScheme(primary = Navy2, secondary = Gold, background = Cream, surface = Panel)) {
         CompositionLocalProvider(LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
-            if (selected != null) {
+            if (showSplash) {
+                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                    WisalPosterImage("SPLASH_ART", Modifier.fillMaxSize(), ContentScale.Crop)
+                }
+            } else if (selected != null) {
                 ChatScreen(person = selected!!, onBack = { selected = null })
             } else {
                 Scaffold(
@@ -147,8 +157,9 @@ fun StatusStrip() {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             listOf("أنت", "Menna", "Shaker", "Sohaila", "محمد").forEachIndexed { index, label ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(54.dp)) {
-                    Box(Modifier.size(50.dp).background(Gold, CircleShape).padding(2.dp).background(Color(0xFF161616), CircleShape), contentAlignment = Alignment.Center) {
-                        Text(listOf("+", "م", "ش", "س", "م")[index], color = Gold, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Box(Modifier.size(50.dp).background(Gold, CircleShape).padding(2.dp), contentAlignment = Alignment.Center) {
+                        if (index == 0) Text("+", color = Gold, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                        else WisalPosterImage("AVATAR_PROFILE", Modifier.fillMaxSize().clip(CircleShape), ContentScale.Crop)
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(label, color = Color.LightGray, fontSize = 10.sp, maxLines = 1)
@@ -184,10 +195,9 @@ fun ChatRow(person: Person, onClick: () -> Unit) {
 
 @Composable
 fun Avatar(text: String, size: Int = 48) {
-    Box(
-        Modifier.size(size.dp).background(Navy2, CircleShape),
-        contentAlignment = Alignment.Center
-    ) { Text(text, color = Gold, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
+    Box(Modifier.size(size.dp).background(Gold, CircleShape).padding(2.dp), contentAlignment = Alignment.Center) {
+        WisalPosterImage(if (text == "مج") "GROUP_ICON" else "AVATAR_PROFILE", Modifier.fillMaxSize().clip(CircleShape), ContentScale.Crop)
+    }
 }
 
 @Composable
@@ -251,7 +261,9 @@ fun StatusPage() {
             Avatar("+", 54); Spacer(Modifier.width(12.dp))
             Column { Text("حالتي", fontWeight = FontWeight.Bold, color = Ink); Text("أضف تحديثاً جديداً", color = Muted, fontSize = 12.sp) }
         }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(18.dp))
+        WisalPosterImage("MOSQUE_STORY", Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(18.dp)), ContentScale.Crop)
+        Spacer(Modifier.height(18.dp))
         people.take(3).forEach { Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.background(Gold, CircleShape).padding(3.dp)) { Avatar(it.initials, 48) }
             Spacer(Modifier.width(12.dp)); Column { Text(it.name, color = Ink, fontWeight = FontWeight.Bold); Text("منذ قليل", color = Muted, fontSize = 12.sp) }
@@ -281,7 +293,7 @@ fun ContactsPage(onOpen: (Person) -> Unit) {
 @Composable
 fun ProfilePage() {
     Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(24.dp)); Avatar("وص", 92)
+        Spacer(Modifier.height(24.dp)); Avatar("وص", 112)
         Spacer(Modifier.height(14.dp))
         Text("ملفي الشخصي", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Text("مرحباً بك في مجتمع وصال", color = Muted)
