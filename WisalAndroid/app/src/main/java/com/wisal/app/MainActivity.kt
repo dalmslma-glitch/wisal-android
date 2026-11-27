@@ -79,16 +79,17 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            if (signedIn) WisalApp() else WisalAuthScreen(onSignedIn = { signedIn = true })
+            if (signedIn) WisalApp(onSignOut = { FirebaseAuth.getInstance().signOut(); signedIn = false }) else WisalAuthScreen(onSignedIn = { signedIn = true })
         }
     }
 }
 
 @Composable
-fun WisalApp() {
+fun WisalApp(onSignOut: () -> Unit) {
     var tab by remember { mutableStateOf("الدردشات") }
     var selected by remember { mutableStateOf<Person?>(null) }
     var showSplash by remember { mutableStateOf(true) }
+    var showSettings by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(1600); showSplash = false }
     MaterialTheme(colorScheme = darkColorScheme(primary = Navy2, secondary = Gold, background = Cream, surface = Panel)) {
         CompositionLocalProvider(LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
@@ -127,7 +128,7 @@ fun WisalApp() {
                     }
                 ) { padding ->
                     Column(Modifier.fillMaxSize().padding(padding)) {
-                        Header(tab)
+                        Header(tab, onSearchClick = { tab = "الدردشات" }, onMenuClick = { showSettings = true })
                         when (tab) {
                             "الدردشات" -> Chats { selected = it }
                             "الحالات" -> StatusPage()
@@ -137,13 +138,14 @@ fun WisalApp() {
                         }
                     }
                 }
+                if (showSettings) WisalSettingsDialog(onDismiss = { showSettings = false }, onSignOut = onSignOut)
             }
         }
     }
 }
 
 @Composable
-fun Header(title: String) {
+fun Header(title: String, onSearchClick: () -> Unit, onMenuClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(Navy).padding(horizontal = 18.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -152,8 +154,8 @@ fun Header(title: String) {
             Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Text("WISAL", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         }
-        IconButton(onClick = {}) { Icon(Icons.Default.Search, null, tint = Color.White) }
-        IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, null, tint = Gold) }
+        IconButton(onClick = onSearchClick) { Icon(Icons.Default.Search, null, tint = Color.White) }
+        IconButton(onClick = onMenuClick) { Icon(Icons.Default.MoreVert, null, tint = Gold) }
     }
 }
 
@@ -320,8 +322,8 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
                                     Text(item.text, color = Color.White, fontSize = 14.sp)
                                 }
                                 if (mine) {
-                                    val delivered = item.deliveredTo.isNotEmpty()
-                                    val read = item.readBy.any { it != myUid }
+                                    val delivered = item.deliveredTo.contains(person.uid)
+                                    val read = item.readBy.contains(person.uid)
                                     Text(
                                         when { read -> "✓✓"; delivered -> "✓✓"; else -> "✓" },
                                         color = if (read) Color(0xFF61C8FF) else Color(0xFFB8C6D8),
@@ -370,8 +372,12 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
         }
         if (emojiPickerVisible.value) {
             Row(Modifier.fillMaxWidth().background(Panel).padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                listOf("😀","😂","🥹","😭","❤️","👍","🙏","😍").forEach { emoji ->
-                    Text(emoji, modifier = Modifier.clickable { message += emoji }, fontSize = 23.sp)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("😀","😂","🥹","😭","❤️","👍","🙏","😍","😊","😎","🥰","😘","😅","🤣","😉","🤔","😴","😢","😡","👏","🎉","🔥","💯","🤝").chunked(8).forEach { group ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            group.forEach { emoji -> Text(emoji, modifier = Modifier.clickable { message += emoji }, fontSize = 23.sp) }
+                        }
+                    }
                 }
             }
         }
@@ -446,6 +452,35 @@ fun ContactsPage(onOpen: (Person) -> Unit) {
             }
         }
     }
+}
+
+@Composable
+fun WisalSettingsDialog(onDismiss: () -> Unit, onSignOut: () -> Unit) {
+    val account = FirebaseAuth.getInstance().currentUser
+    var confirmSignOut by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إعدادات وصال", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("الحساب", color = Gold, fontWeight = FontWeight.Bold)
+                Text(account?.email ?: account?.phoneNumber ?: "حساب وصال", color = Color.White)
+                Text("معرّف الحساب: ${account?.uid?.take(12) ?: "غير متاح"}…", color = Muted, fontSize = 11.sp)
+                HorizontalDivider(color = Color(0xFF444444))
+                Text("الخصوصية: لا تشارك رمز الدخول أو كلمة المرور مع أي شخص.", color = Color.White, fontSize = 13.sp)
+                Text("اللغات الإضافية وتشفير طرف إلى طرف والمكالمات تحتاج إلى تطوير واختبار مستقل قبل إعلان جاهزيتها.", color = Muted, fontSize = 12.sp)
+                if (confirmSignOut) Text("هل تريد تسجيل الخروج من هذا الحساب؟", color = Color(0xFFFFB4AB))
+            }
+        },
+        confirmButton = {
+            if (confirmSignOut) TextButton(onClick = onSignOut) { Text("تأكيد الخروج", color = Color(0xFFFF8A80)) }
+            else TextButton(onClick = { confirmSignOut = true }) { Text("تسجيل الخروج", color = Color(0xFFFF8A80)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق", color = Gold) } },
+        containerColor = Color(0xFF242424),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
 }
 
 @Composable
