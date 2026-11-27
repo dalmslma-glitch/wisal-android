@@ -8,8 +8,8 @@ initializeApp();
 
 exports.lookupUserByPhone = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-  const phone = String(request.data.phone || "").replace(/[\\s()-]/g, "");
-  if (!/^\\+[1-9]\\d{7,14}$/.test(phone)) {
+  const phone = String(request.data.phone || "").replace(/[\s()-]/g, "");
+  if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
     throw new HttpsError("invalid-argument", "أدخل الرقم بصيغة دولية صحيحة.");
   }
   const result = await getFirestore().collection("users").where("phone", "==", phone).limit(1).get();
