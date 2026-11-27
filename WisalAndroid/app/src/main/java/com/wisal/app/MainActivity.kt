@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import kotlinx.coroutines.delay
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
@@ -39,7 +40,7 @@ private val Ink = Color(0xFFF2F2F2)
 private val Muted = Color(0xFF929292)
 private val Panel = Color(0xFF242424)
 
-data class Person(val name: String, val message: String, val time: String, val initials: String, val unread: Int = 0)
+data class Person(val name: String, val message: String, val time: String, val initials: String, val unread: Int = 0, val uid: String? = null)
 private val people = listOf(
     Person("أحمد محمد", "السلام عليكم، كيف حالك؟", "٩:٤٢ م", "أم", 2),
     Person("سارة", "أرسلت صورة", "٨:١٥ م", "س"),
@@ -240,38 +241,103 @@ fun Avatar(text: String, size: Int = 48) {
 fun ChatScreen(person: Person, onBack: () -> Unit) {
     var message by remember { mutableStateOf("") }
     var sent by remember { mutableStateOf(listOf<String>()) }
-    Column(Modifier.fillMaxSize().background(Color(0xFF101010))) {
-        Row(Modifier.fillMaxWidth().background(Color(0xFF090909)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+    var cloudMessages by remember(person.uid) { mutableStateOf(emptyList<WisalMessage>()) }
+    var sendError by remember { mutableStateOf("") }
+    val myUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+
+    DisposableEffect(person.uid) {
+        val otherUid = person.uid
+        if (otherUid != null) {
+            val stop = WisalMessaging.observeMessages(
+                otherUid,
+                onChange = { cloudMessages = it },
+                onError = { sendError = it }
+            )
+            WisalMessaging.markRead(otherUid)
+            onDispose { stop() }
+        } else onDispose { }
+    }
+
+    Column(Modifier.fillMaxSize().background(Color(0xFF101827))) {
+        Row(Modifier.fillMaxWidth().background(Color(0xFF111B2B)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, null, tint = Color.White) }
             AvatarFor(person.name, 40)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(person.name, color = Gold, fontWeight = FontWeight.Bold)
-                Text("متصل الآن", color = Gold, fontSize = 11.sp)
+                Text(if (person.uid == null) "معاينة" else "محادثة وصال", color = Color(0xFF9EABC0), fontSize = 11.sp)
             }
-            IconButton(onClick = {}) { Icon(Icons.Default.Call, null, tint = Color.White) }
-            IconButton(onClick = {}) { Icon(Icons.Default.Videocam, null, tint = Color.White) }
+            IconButton(onClick = { sendError = "المكالمات الصوتية ستضاف بعد إعداد خدمة الاتصال." }) { Icon(Icons.Default.Call, null, tint = Color.White) }
+            IconButton(onClick = { sendError = "مكالمات الفيديو ستضاف بعد إعداد خدمة الاتصال." }) { Icon(Icons.Default.Videocam, null, tint = Color.White) }
         }
-        Column(Modifier.weight(1f).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.Bottom) {
-            Bubble("مرحباً بك في وصال 💙", false)
-            Bubble("هذه معاينة لتصميم المحادثة.", false)
-            sent.forEach { Bubble(it, true) }
+        LazyColumn(
+            Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            reverseLayout = false
+        ) {
+            if (person.uid == null) {
+                item { Bubble("هذه محادثة تجريبية قديمة. ابحث عن حساب وصال برقم هاتفه لبدء محادثة حقيقية.", false) }
+                items(sent) { Bubble(it, true) }
+            } else {
+                items(cloudMessages, key = { it.id }) { item ->
+                    val mine = item.senderId == myUid
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.Start else Arrangement.End) {
+                        Surface(
+                            color = if (mine) Color(0xFF234B43) else Color(0xFF202C3D),
+                            shape = RoundedCornerShape(16.dp), shadowElevation = 1.dp
+                        ) {
+                            Column(Modifier.padding(horizontal = 13.dp, vertical = 8.dp)) {
+                                Text(item.text, color = Color.White, fontSize = 14.sp)
+                                if (mine) {
+                                    val delivered = item.deliveredTo.isNotEmpty()
+                                    val read = item.readBy.any { it != myUid }
+                                    Text(
+                                        when { read -> "✓✓"; delivered -> "✓✓"; else -> "✓" },
+                                        color = if (read) Color(0xFF61C8FF) else Color(0xFFB8C6D8),
+                                        fontSize = 10.sp, textAlign = TextAlign.End,
+                                        modifier = Modifier.align(Alignment.End)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(7.dp))
+                }
+            }
         }
-        Row(Modifier.fillMaxWidth().background(Color(0xFF191919)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = {}) { Icon(Icons.Default.AttachFile, null, tint = Navy2) }
+        if (sendError.isNotBlank()) {
+            Text(sendError, color = Color(0xFFFFB4AB), modifier = Modifier.padding(horizontal = 12.dp), fontSize = 11.sp)
+        }
+        Row(Modifier.fillMaxWidth().background(Color(0xFF111B2B)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            var showEmoji by remember { mutableStateOf(false) }
+            IconButton(onClick = { showEmoji = !showEmoji }) { Icon(Icons.Default.EmojiEmotions, null, tint = Gold) }
+            IconButton(onClick = { sendError = "رفع الصور والملفات يحتاج تفعيل Firebase Storage وربطه بواجهة الإرفاق." }) {
+                Icon(Icons.Default.AttachFile, null, tint = Gold)
+            }
             OutlinedTextField(
-                value = message, onValueChange = { message = it },
-                modifier = Modifier.weight(1f), placeholder = { Text("اكتب نصاً...", color = Muted) },
+                value = message, onValueChange = { message = it; sendError = "" },
+                modifier = Modifier.weight(1f), placeholder = { Text("اكتب رسالة...", color = Muted) },
                 shape = RoundedCornerShape(24.dp), singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White, unfocusedTextColor = Color.White,
                     focusedBorderColor = Gold, unfocusedBorderColor = Color.Transparent,
-                    focusedContainerColor = Panel, unfocusedContainerColor = Panel,
-                    cursorColor = Gold
+                    focusedContainerColor = Panel, unfocusedContainerColor = Panel, cursorColor = Gold
                 )
             )
-            IconButton(onClick = { if (message.isNotBlank()) { sent = sent + message; message = "" } }) {
-                Icon(Icons.Default.Send, null, tint = Gold)
+            IconButton(onClick = {
+                if (message.isNotBlank()) {
+                    val outgoing = message.trim()
+                    if (person.uid != null) {
+                        WisalMessaging.sendText(person.uid, outgoing) { sendError = it }
+                    } else sent = sent + outgoing
+                    message = ""
+                }
+            }) { Icon(Icons.Default.Send, null, tint = Gold) }
+        }
+        if (showEmoji) {
+            Row(Modifier.fillMaxWidth().background(Panel).padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                listOf("😀","😂","🥹","😭","❤️","👍","🙏","😍").forEach { emoji ->
+                    Text(emoji, modifier = Modifier.clickable { message += emoji }, fontSize = 23.sp)
+                }
             }
         }
     }
@@ -331,8 +397,50 @@ fun GroupsPage() {
 
 @Composable
 fun ContactsPage(onOpen: (Person) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(people) { ChatRow(it.copy(message = "متاح للتواصل"), onClick = { onOpen(it) }) }
+    var phone by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("أدخل رقم هاتف الشخص مع مفتاح الدولة للعثور على حسابه في وصال.") }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("ابدأ محادثة جديدة", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text("لا توجد اقتراحات غرباء؛ ابحث فقط عن جهة اتصال تعرف رقمها.", color = Muted, fontSize = 12.sp)
+        Spacer(Modifier.height(14.dp))
+        OutlinedTextField(
+            value = phone, onValueChange = { phone = it },
+            modifier = Modifier.fillMaxWidth(), singleLine = true,
+            label = { Text("رقم الهاتف الدولي مثل +905...") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Gold, unfocusedBorderColor = Muted)
+        )
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = {
+                loading = true
+                message = ""
+                com.google.firebase.functions.FirebaseFunctions.getInstance()
+                    .getHttpsCallable("lookupUserByPhone")
+                    .call(mapOf("phone" to phone.trim()))
+                    .addOnSuccessListener { result ->
+                        loading = false
+                        val data = result.data as? Map<*, *>
+                        val uid = data?.get("uid") as? String
+                        val name = data?.get("displayName") as? String ?: "جهة اتصال وصال"
+                        if (uid.isNullOrBlank()) message = "لم نعثر على حساب بهذا الرقم."
+                        else onOpen(Person(name, "ابدأ المحادثة", "", name.take(1), uid = uid))
+                    }
+                    .addOnFailureListener {
+                        loading = false
+                        message = it.localizedMessage ?: "تعذر البحث. تحقق من اتصال الإنترنت."
+                    }
+            },
+            modifier = Modifier.fillMaxWidth(), enabled = !loading && phone.isNotBlank(),
+            colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black)
+        ) {
+            if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black)
+            else Text("بحث عن الحساب")
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(message, color = Muted, fontSize = 12.sp)
     }
 }
 
