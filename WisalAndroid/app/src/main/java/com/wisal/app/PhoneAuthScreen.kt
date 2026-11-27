@@ -31,7 +31,7 @@ private val AuthBackground = Color(0xFF121212)
 private val AuthPanel = Color(0xFF242424)
 
 @Composable
-fun PhoneAuthScreen() {
+fun PhoneAuthScreen(onSignedIn: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? Activity
     val auth = remember { FirebaseAuth.getInstance() }
@@ -50,6 +50,7 @@ fun PhoneAuthScreen() {
                 message = task.exception?.localizedMessage ?: "تعذر التحقق من الرقم. حاول مرة أخرى."
             } else {
                 message = "تم التحقق بنجاح."
+                onSignedIn()
             }
         }
     }
