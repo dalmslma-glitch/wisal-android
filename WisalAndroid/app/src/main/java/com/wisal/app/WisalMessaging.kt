@@ -1,0 +1,133 @@
+package com.wisal.app
+
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import java.security.MessageDigest
+
+data class WisalUser(
+    val uid: String = "",
+    val phone: String = "",
+    val displayName: String = "",
+    val photoUrl: String = "",
+    val lastSeen: Long = 0L
+)
+
+data class WisalMessage(
+    val id: String = "",
+    val senderId: String = "",
+    val text: String = "",
+    val createdAt: Long = 0L,
+    val deliveredTo: List<String> = emptyList(),
+    val readBy: List<String> = emptyList(),
+    val type: String = "text"
+)
+
+/**
+ * Cloud Firestore data layer. Chat IDs are deterministic for a pair of accounts;
+ * message status is stored per recipient so sent/delivered/read are distinct states.
+ */
+object WisalMessaging {
+    private val db get() = FirebaseFirestore.getInstance()
+    private val auth get() = FirebaseAuth.getInstance()
+
+    fun saveMyProfile(displayName: String = "") {
+        val user = auth.currentUser ?: return
+        val data = hashMapOf(
+            "uid" to user.uid,
+            "phone" to (user.phoneNumber ?: ""),
+            "displayName" to displayName,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        db.collection("users").document(user.uid).set(data, com.google.firebase.firestore.SetOptions.merge())
+    }
+
+    fun chatId(otherUid: String): String {
+        val ids = listOf(auth.currentUser?.uid ?: "unknown", otherUid).sorted()
+        return MessageDigest.getInstance("SHA-256")
+            .digest(ids.joinToString("_").toByteArray())
+            .joinToString("") { "%02x".format(it) }
+    }
+
+    fun findUserByPhone(phone: String, onResult: (WisalUser?, String?) -> Unit) {
+        val normalized = phone.trim().replace(" ", "")
+        if (normalized.isBlank()) { onResult(null, "أدخل رقم الهاتف مع مفتاح الدولة."); return }
+        db.collection("users").whereEqualTo("phone", normalized).limit(1).get()
+            .addOnSuccessListener { result ->
+                val item = result.documents.firstOrNull()
+                if (item == null || item.id == auth.currentUser?.uid) onResult(null, "لم نعثر على حساب وصال بهذا الرقم.")
+                else onResult(item.toObject(WisalUser::class.java)?.copy(uid = item.id), null)
+            }
+            .addOnFailureListener { onResult(null, it.localizedMessage ?: "تعذر البحث عن الحساب.") }
+    }
+
+    fun observeMessages(otherUid: String, onChange: (List<WisalMessage>) -> Unit, onError: (String) -> Unit): () -> Unit {
+        val myUid = auth.currentUser?.uid ?: return {}
+        val ref = db.collection("chats").document(chatId(otherUid)).collection("messages")
+            .orderBy("createdAt", Query.Direction.ASCENDING).limitToLast(200)
+        val registration = ref.addSnapshotListener { snapshot, error ->
+            if (error != null) { onError(error.localizedMessage ?: "تعذر تحميل الرسائل."); return@addSnapshotListener }
+            val messages = snapshot?.documents?.mapNotNull { doc ->
+                doc.toObject(WisalMessage::class.java)?.copy(id = doc.id)
+            }.orEmpty()
+            onChange(messages)
+            snapshot?.documents?.filter { doc ->
+                val sender = doc.getString("senderId")
+                sender != myUid && !(doc.get("readBy") as? List<*>)?.contains(myUid).orFalse()
+            }?.forEach { doc ->
+                doc.reference.update("deliveredTo", FieldValue.arrayUnion(myUid))
+            }
+        }
+        return { registration.remove() }
+    }
+
+    fun sendText(otherUid: String, text: String, onError: (String) -> Unit = {}) {
+        val me = auth.currentUser?.uid ?: run { onError("سجّل الدخول أولاً."); return }
+        val clean = text.trim()
+        if (clean.isEmpty()) return
+        val chat = db.collection("chats").document(chatId(otherUid))
+        val message = hashMapOf(
+            "senderId" to me,
+            "text" to clean,
+            "type" to "text",
+            "createdAt" to System.currentTimeMillis(),
+            "deliveredTo" to emptyList<String>(),
+            "readBy" to listOf(me)
+        )
+        chat.set(mapOf(
+            "members" to listOf(me, otherUid),
+            "lastMessage" to clean,
+            "lastSenderId" to me,
+            "updatedAt" to FieldValue.serverTimestamp()
+        ), com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                chat.collection("messages").add(message).addOnFailureListener {
+                    onError(it.localizedMessage ?: "تعذر إرسال الرسالة.")
+                }
+            }.addOnFailureListener { onError(it.localizedMessage ?: "تعذر إنشاء المحادثة.") }
+    }
+
+    fun markRead(otherUid: String) {
+        val me = auth.currentUser?.uid ?: return
+        db.collection("chats").document(chatId(otherUid)).collection("messages")
+            .whereNotEqualTo("senderId", me).get().addOnSuccessListener { result ->
+                result.documents.forEach { doc ->
+                    doc.reference.update("readBy", FieldValue.arrayUnion(me))
+                }
+            }
+    }
+
+    fun observeMyChats(onChange: (List<String>) -> Unit, onError: (String) -> Unit): () -> Unit {
+        val me = auth.currentUser?.uid ?: return {}
+        val registration = db.collection("chats").whereArrayContains("members", me)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { onError(error.localizedMessage ?: "تعذر تحميل المحادثات."); return@addSnapshotListener }
+                onChange(snapshot?.documents.orEmpty().flatMap { it.get("members") as? List<String> ?: emptyList() }
+                    .filter { it != me }.distinct())
+            }
+        return { registration.remove() }
+    }
+
+    private fun Boolean?.orFalse() = this ?: false
+}
