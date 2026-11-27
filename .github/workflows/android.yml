@@ -32,6 +32,9 @@ jobs:
       - name: Build WISAL debug APK
         run: gradle --no-daemon -p WisalAndroid :app:assembleDebug
 
+      - name: Print Android signing fingerprints for Firebase
+        run: gradle --no-daemon -p WisalAndroid :app:signingReport
+
       - name: Upload WISAL APK
         uses: actions/upload-artifact@v4
         with:
