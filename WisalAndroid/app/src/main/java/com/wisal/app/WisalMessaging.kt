@@ -76,7 +76,12 @@ object WisalMessaging {
                 val sender = doc.getString("senderId")
                 sender != myUid && !(doc.get("readBy") as? List<*>)?.contains(myUid).orFalse()
             }?.forEach { doc ->
-                doc.reference.update("deliveredTo", FieldValue.arrayUnion(myUid))
+                doc.reference.update(
+                    mapOf(
+                        "deliveredTo" to FieldValue.arrayUnion(myUid),
+                        "readBy" to FieldValue.arrayUnion(myUid)
+                    )
+                )
             }
         }
         return { registration.remove() }
