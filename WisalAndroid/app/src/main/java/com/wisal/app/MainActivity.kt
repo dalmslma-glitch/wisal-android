@@ -273,19 +273,29 @@ fun Bubble(text: String, mine: Boolean) {
 fun StatusPage() {
     Column(Modifier.fillMaxSize().padding(18.dp)) {
         Text("الحالات", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        Text("تابع تحديثات أصدقائك وشارك لحظاتك.", color = Muted)
+        Text("شارك لحظاتك مع جهات اتصالك.", color = Muted)
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar("+", 54); Spacer(Modifier.width(12.dp))
-            Column { Text("حالتي", fontWeight = FontWeight.Bold, color = Ink); Text("أضف تحديثاً جديداً", color = Muted, fontSize = 12.sp) }
+            Avatar("وص", 54)
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("حالتي", fontWeight = FontWeight.Bold, color = Ink)
+                Text("أضف تحديثاً جديداً", color = Muted, fontSize = 12.sp)
+            }
         }
         Spacer(Modifier.height(18.dp))
-        WisalPosterImage("MOSQUE_STORY", Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(18.dp)), ContentScale.Crop)
-        Spacer(Modifier.height(18.dp))
-        people.take(3).forEach { Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.background(Gold, CircleShape).padding(3.dp)) { AvatarFor(it.name, 48) }
-            Spacer(Modifier.width(12.dp)); Column { Text(it.name, color = Ink, fontWeight = FontWeight.Bold); Text("منذ قليل", color = Muted, fontSize = 12.sp) }
-        } }
+        Text("آخر التحديثات", color = Gold, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        people.take(3).forEach { person ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.background(Gold, CircleShape).padding(3.dp)) { AvatarFor(person.name, 48) }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(person.name, color = Ink, fontWeight = FontWeight.Bold)
+                    Text("تحديث حالة", color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
     }
 }
 
