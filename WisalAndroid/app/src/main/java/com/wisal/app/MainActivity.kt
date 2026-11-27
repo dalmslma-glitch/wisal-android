@@ -23,12 +23,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val Navy = Color(0xFF081B35)
-private val Navy2 = Color(0xFF102D50)
-private val Gold = Color(0xFFE3BD68)
-private val Cream = Color(0xFFF5F1E8)
-private val Ink = Color(0xFF14243A)
-private val Muted = Color(0xFF8190A3)
+private val Navy = Color(0xFF090909)
+private val Navy2 = Color(0xFFFF8A00)
+private val Gold = Color(0xFFFF8A00)
+private val Cream = Color(0xFF121212)
+private val Ink = Color(0xFFF2F2F2)
+private val Muted = Color(0xFF929292)
+private val Panel = Color(0xFF242424)
 
 data class Person(val name: String, val message: String, val time: String, val initials: String, val unread: Int = 0)
 private val people = listOf(
@@ -49,7 +50,7 @@ class MainActivity : ComponentActivity() {
 fun WisalApp() {
     var tab by remember { mutableStateOf("الدردشات") }
     var selected by remember { mutableStateOf<Person?>(null) }
-    MaterialTheme(colorScheme = lightColorScheme(primary = Navy2, secondary = Gold, background = Cream)) {
+    MaterialTheme(colorScheme = darkColorScheme(primary = Navy2, secondary = Gold, background = Cream, surface = Panel)) {
         CompositionLocalProvider(LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
             if (selected != null) {
                 ChatScreen(person = selected!!, onBack = { selected = null })
@@ -57,7 +58,7 @@ fun WisalApp() {
                 Scaffold(
                     containerColor = Cream,
                     bottomBar = {
-                        NavigationBar(containerColor = Navy, contentColor = Gold) {
+                        NavigationBar(containerColor = Color(0xFF101010), contentColor = Gold) {
                             val tabs = listOf(
                                 "الدردشات" to Icons.Default.ChatBubble,
                                 "الحالات" to Icons.Default.Circle,
@@ -73,8 +74,8 @@ fun WisalApp() {
                                     label = { Text(label, fontSize = 10.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = Gold, selectedTextColor = Gold,
-                                        unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray,
-                                        indicatorColor = Navy2
+                                        unselectedIconColor = Color(0xFF777777), unselectedTextColor = Color(0xFF777777),
+                                        indicatorColor = Color(0xFF302015)
                                     )
                                 )
                             }
@@ -104,8 +105,8 @@ fun Header(title: String) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text("وصال", color = Gold, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-            Text(title, color = Color.White.copy(alpha = .82f), fontSize = 13.sp)
+            Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("WISAL", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         }
         IconButton(onClick = {}) { Icon(Icons.Default.Search, null, tint = Color.White) }
         IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, null, tint = Gold) }
@@ -118,15 +119,40 @@ fun Chats(onOpen: (Person) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         OutlinedTextField(
             value = query, onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            placeholder = { Text("ابحث في المحادثات") },
-            leadingIcon = { Icon(Icons.Default.Search, null) },
-            shape = RoundedCornerShape(18.dp), singleLine = true
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            placeholder = { Text("بحث عن الأشخاص أو الرسائل", color = Muted) },
+            leadingIcon = { Icon(Icons.Default.Search, null, tint = Gold) },
+            shape = RoundedCornerShape(22.dp), singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                focusedBorderColor = Gold, unfocusedBorderColor = Color.Transparent,
+                focusedContainerColor = Panel, unfocusedContainerColor = Panel,
+                cursorColor = Gold
+            )
         )
+        StatusStrip()
         LazyColumn {
             items(people.filter { it.name.contains(query) || it.message.contains(query) }) { person ->
                 ChatRow(person, onClick = { onOpen(person) })
-                HorizontalDivider(color = Color(0xFFE6E0D5), thickness = 0.7.dp)
+                HorizontalDivider(color = Color(0xFF292929), thickness = 0.7.dp)
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusStrip() {
+    Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp)) {
+        Text("الحالات", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            listOf("أنت", "Menna", "Shaker", "Sohaila", "محمد").forEachIndexed { index, label ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(54.dp)) {
+                    Box(Modifier.size(50.dp).background(Gold, CircleShape).padding(2.dp).background(Color(0xFF161616), CircleShape), contentAlignment = Alignment.Center) {
+                        Text(listOf("+", "م", "ش", "س", "م")[index], color = Gold, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(label, color = Color.LightGray, fontSize = 10.sp, maxLines = 1)
+                }
             }
         }
     }
@@ -141,8 +167,8 @@ fun ChatRow(person: Person, onClick: () -> Unit) {
         Avatar(person.initials, 52)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(person.name, color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text(person.message, color = Muted, fontSize = 13.sp, maxLines = 1)
+            Text(person.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(person.message, color = Muted, fontSize = 12.sp, maxLines = 1)
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(person.time, color = Muted, fontSize = 11.sp)
@@ -168,14 +194,14 @@ fun Avatar(text: String, size: Int = 48) {
 fun ChatScreen(person: Person, onBack: () -> Unit) {
     var message by remember { mutableStateOf("") }
     var sent by remember { mutableStateOf(listOf<String>()) }
-    Column(Modifier.fillMaxSize().background(Color(0xFFF0EBDD))) {
-        Row(Modifier.fillMaxWidth().background(Navy).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxSize().background(Color(0xFF101010))) {
+        Row(Modifier.fillMaxWidth().background(Color(0xFF090909)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowForward, null, tint = Color.White) }
             Avatar(person.initials, 40)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(person.name, color = Gold, fontWeight = FontWeight.Bold)
-                Text("محادثة تجريبية", color = Color.LightGray, fontSize = 11.sp)
+                Text("متصل الآن", color = Gold, fontSize = 11.sp)
             }
             IconButton(onClick = {}) { Icon(Icons.Default.Call, null, tint = Color.White) }
             IconButton(onClick = {}) { Icon(Icons.Default.Videocam, null, tint = Color.White) }
@@ -185,12 +211,18 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
             Bubble("هذه معاينة لتصميم المحادثة.", false)
             sent.forEach { Bubble(it, true) }
         }
-        Row(Modifier.fillMaxWidth().background(Color.White).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().background(Color(0xFF191919)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = {}) { Icon(Icons.Default.AttachFile, null, tint = Navy2) }
             OutlinedTextField(
                 value = message, onValueChange = { message = it },
-                modifier = Modifier.weight(1f), placeholder = { Text("اكتب رسالة...") },
-                shape = RoundedCornerShape(24.dp), singleLine = true
+                modifier = Modifier.weight(1f), placeholder = { Text("اكتب نصاً...", color = Muted) },
+                shape = RoundedCornerShape(24.dp), singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    focusedBorderColor = Gold, unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = Panel, unfocusedContainerColor = Panel,
+                    cursorColor = Gold
+                )
             )
             IconButton(onClick = { if (message.isNotBlank()) { sent = sent + message; message = "" } }) {
                 Icon(Icons.Default.Send, null, tint = Gold)
@@ -202,8 +234,8 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
 @Composable
 fun Bubble(text: String, mine: Boolean) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.Start else Arrangement.End) {
-        Surface(color = if (mine) Color(0xFFE7D5A9) else Color.White, shape = RoundedCornerShape(16.dp), shadowElevation = 1.dp) {
-            Text(text, Modifier.padding(horizontal = 14.dp, vertical = 10.dp), color = Ink, fontSize = 14.sp)
+        Surface(color = if (mine) Gold else Panel, shape = RoundedCornerShape(16.dp), shadowElevation = 1.dp) {
+            Text(text, Modifier.padding(horizontal = 14.dp, vertical = 10.dp), color = if (mine) Color.Black else Color.White, fontSize = 14.sp)
         }
     }
     Spacer(Modifier.height(8.dp))
@@ -212,7 +244,7 @@ fun Bubble(text: String, mine: Boolean) {
 @Composable
 fun StatusPage() {
     Column(Modifier.fillMaxSize().padding(18.dp)) {
-        Text("الحالات", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
+        Text("الحالات", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Text("تابع تحديثات أصدقائك وشارك لحظاتك.", color = Muted)
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -230,7 +262,7 @@ fun StatusPage() {
 @Composable
 fun GroupsPage() {
     Column(Modifier.fillMaxSize().padding(18.dp)) {
-        Text("مجموعات وصال", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
+        Text("مجموعات وصال", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
         listOf("العائلة", "الأصدقاء", "مجتمع وصال").forEach {
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar("مج", 48); Spacer(Modifier.width(12.dp)); Text(it, color = Ink, fontWeight = FontWeight.Bold)
@@ -251,12 +283,12 @@ fun ProfilePage() {
     Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(24.dp)); Avatar("وص", 92)
         Spacer(Modifier.height(14.dp))
-        Text("ملفي الشخصي", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Ink)
+        Text("ملفي الشخصي", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Text("مرحباً بك في مجتمع وصال", color = Muted)
         Spacer(Modifier.height(22.dp))
         listOf("تعديل الاسم والصورة", "الخصوصية والأمان", "الإشعارات", "حول وصال").forEach {
-            Surface(Modifier.fillMaxWidth().padding(vertical = 5.dp), color = Color.White, shape = RoundedCornerShape(14.dp)) {
-                Text(it, Modifier.padding(16.dp), color = Ink)
+            Surface(Modifier.fillMaxWidth().padding(vertical = 5.dp), color = Panel, shape = RoundedCornerShape(14.dp)) {
+                Text(it, Modifier.padding(16.dp), color = Color.White)
             }
         }
     }
