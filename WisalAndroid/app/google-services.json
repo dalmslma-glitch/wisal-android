@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "634443036270",
+    "project_id": "wisal-f7bb5",
+    "storage_bucket": "wisal-f7bb5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:634443036270:android:e3f926e1e8fb16b539987f",
+        "android_client_info": {
+          "package_name": "com.wisal.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAFIxA_OBvjZO2b2ZBLC6aHtRw1X5nK-hc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
