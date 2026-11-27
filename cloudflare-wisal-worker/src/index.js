@@ -90,6 +90,7 @@ export default {
       }});
     }
     try {
+      if (request.method === "GET" && url.pathname === "/health") return json({ status: "ok", service: "wisal-media-worker" });
       if (request.method === "POST" && url.pathname === "/v1/upload-ticket") {
         const uid = await verifyFirebaseToken(request);
         const body = await request.json();
