@@ -15,6 +15,36 @@ service cloud.firestore {
       allow delete: if signedIn() && request.auth.uid == userId;
     }
 
+
+    match /groups/{groupId} {
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.members is list
+        && request.resource.data.members.size() == 1
+        && request.resource.data.members[0] == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 60;
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.members
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt']);
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function groupMember() {
+          return signedIn()
+            && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        }
+        allow read: if groupMember();
+        allow create: if groupMember()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 10000;
+        allow update, delete: if false;
+      }
+    }
+
     match /chats/{chatId} {
       allow create: if signedIn() && request.auth.uid in request.resource.data.members
         && request.resource.data.members.size() == 2;
