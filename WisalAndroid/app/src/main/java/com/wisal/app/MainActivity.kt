@@ -94,7 +94,7 @@ fun WisalApp() {
         CompositionLocalProvider(LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
             if (showSplash) {
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
-                    WisalPosterImage("SPLASH_ART", Modifier.fillMaxSize(), ContentScale.Crop)
+                    WisalAnimatedSplash()
                 }
             } else if (selected != null) {
                 ChatScreen(person = selected!!, onBack = { selected = null })
@@ -312,7 +312,9 @@ fun ChatScreen(person: Person, onBack: () -> Unit) {
                                     AsyncImage(
                                         model = item.mediaUrl,
                                         contentDescription = "صورة مرسلة",
-                                        modifier = Modifier.sizeIn(maxWidth = 220.dp, maxHeight = 260.dp)
+                                        modifier = Modifier.widthIn(max = 280.dp).heightIn(max = 360.dp).clip(RoundedCornerShape(12.dp)),
+                                        contentScale = ContentScale.Fit,
+                                        crossfade = true
                                     )
                                 } else {
                                     Text(item.text, color = Color.White, fontSize = 14.sp)
