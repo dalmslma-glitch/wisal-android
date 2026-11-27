@@ -17,6 +17,8 @@ data class WisalUser(
     val lastSeen: Long = 0L
 )
 
+data class WisalGroup(val id: String = "", val name: String = "", val createdBy: String = "", val members: List<String> = emptyList(), val createdAt: Long = 0L, val lastMessage: String = "")
+
 data class WisalMessage(
     val id: String = "",
     val senderId: String = "",
@@ -228,6 +230,59 @@ object WisalMessaging {
                 }
                 .addOnFailureListener { onError(it.localizedMessage ?: "تعذر رفع المرفق."); onComplete() }
         }.addOnFailureListener { onError(it.localizedMessage ?: "تعذر إنشاء المحادثة."); onComplete() }
+    }
+
+
+    fun createGroup(name: String, onResult: (WisalGroup?, String?) -> Unit) {
+        val me = auth.currentUser?.uid ?: run { onResult(null, "سجّل الدخول أولاً."); return }
+        val cleanName = name.trim().take(60)
+        if (cleanName.length < 2) { onResult(null, "اسم المجموعة يجب أن يتكون من حرفين على الأقل."); return }
+        val ref = db.collection("groups").document()
+        val group = WisalGroup(
+            id = ref.id, name = cleanName, createdBy = me,
+            members = listOf(me), createdAt = System.currentTimeMillis(),
+            lastMessage = "تم إنشاء المجموعة"
+        )
+        ref.set(group).addOnSuccessListener { onResult(group, null) }
+            .addOnFailureListener { onResult(null, it.localizedMessage ?: "تعذر إنشاء المجموعة. تحقق من نشر قواعد Firestore الجديدة.") }
+    }
+
+    fun observeMyGroups(onChange: (List<WisalGroup>) -> Unit, onError: (String) -> Unit): () -> Unit {
+        val me = auth.currentUser?.uid ?: return {}
+        val registration = db.collection("groups").whereArrayContains("members", me)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { onError(error.localizedMessage ?: "تعذر تحميل المجموعات."); return@addSnapshotListener }
+                val groups = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(WisalGroup::class.java)?.copy(id = doc.id)
+                }.orEmpty().sortedByDescending { it.createdAt }
+                onChange(groups)
+            }
+        return { registration.remove() }
+    }
+
+    fun sendGroupText(groupId: String, text: String, onError: (String) -> Unit = {}) {
+        val me = auth.currentUser?.uid ?: run { onError("سجّل الدخول أولاً."); return }
+        val clean = text.trim()
+        if (clean.isEmpty()) return
+        val group = db.collection("groups").document(groupId)
+        group.collection("messages").add(hashMapOf(
+            "senderId" to me, "text" to clean, "type" to "text",
+            "createdAt" to System.currentTimeMillis()
+        )).addOnSuccessListener {
+            group.update(mapOf("lastMessage" to clean, "updatedAt" to System.currentTimeMillis()))
+        }.addOnFailureListener { onError(it.localizedMessage ?: "تعذر إرسال رسالة المجموعة.") }
+    }
+
+    fun observeGroupMessages(groupId: String, onChange: (List<WisalMessage>) -> Unit, onError: (String) -> Unit): () -> Unit {
+        val registration = db.collection("groups").document(groupId).collection("messages")
+            .orderBy("createdAt", Query.Direction.ASCENDING).limitToLast(200)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { onError(error.localizedMessage ?: "تعذر تحميل رسائل المجموعة."); return@addSnapshotListener }
+                onChange(snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(WisalMessage::class.java)?.copy(id = doc.id)
+                }.orEmpty())
+            }
+        return { registration.remove() }
     }
 
     fun markRead(otherUid: String) {
