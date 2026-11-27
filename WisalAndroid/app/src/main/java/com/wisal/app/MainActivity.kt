@@ -1,6 +1,8 @@
 package com.wisal.app
 
 import android.os.Bundle
+import android.os.Build
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -27,6 +29,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.messaging.FirebaseMessaging
 
 private val Navy = Color(0xFF090909)
 private val Navy2 = Color(0xFFFF8A00)
@@ -47,8 +50,23 @@ private val people = listOf(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 901)
+        }
         setContent {
             var signedIn by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser != null) }
+            LaunchedEffect(signedIn) {
+                if (signedIn) {
+                    WisalMessaging.saveMyProfile()
+                    FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                        FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
+                            com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                .collection("users").document(uid)
+                                .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
+                        }
+                    }
+                }
+            }
             if (signedIn) WisalApp() else PhoneAuthScreen(onSignedIn = { signedIn = true })
         }
     }
