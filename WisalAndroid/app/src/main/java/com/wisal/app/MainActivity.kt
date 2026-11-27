@@ -422,7 +422,7 @@ fun ContactsPage(onOpen: (Person) -> Unit) {
                     .call(mapOf("phone" to phone.trim()))
                     .addOnSuccessListener { result ->
                         loading = false
-                        val data = result.data as? Map<*, *>
+                        val data = result.getData() as? Map<*, *>
                         val uid = data?.get("uid") as? String
                         val name = data?.get("displayName") as? String ?: "جهة اتصال وصال"
                         if (uid.isNullOrBlank()) message = "لم نعثر على حساب بهذا الرقم."
