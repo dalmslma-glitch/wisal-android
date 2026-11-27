@@ -36,8 +36,15 @@ object WisalMessaging {
     private val db get() = FirebaseFirestore.getInstance()
     private val auth get() = FirebaseAuth.getInstance()
 
-    fun saveMyProfile(displayName: String = "") {
-        val user = auth.currentUser ?: return
+    fun saveMyProfile(
+        displayName: String = "",
+        onResult: ((Boolean, String?) -> Unit)? = null
+    ) {
+        val user = auth.currentUser
+        if (user == null) {
+            onResult?.invoke(false, "لم يتم العثور على حساب مسجل الدخول.")
+            return
+        }
         val data = hashMapOf(
             "uid" to user.uid,
             "phone" to (user.phoneNumber ?: ""),
@@ -45,7 +52,17 @@ object WisalMessaging {
             "displayName" to (displayName.ifBlank { user.displayName ?: "" }),
             "updatedAt" to FieldValue.serverTimestamp()
         )
-        db.collection("users").document(user.uid).set(data, com.google.firebase.firestore.SetOptions.merge())
+        db.collection("users").document(user.uid)
+            .set(data, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                android.util.Log.i("WisalMessaging", "Profile saved for uid=${user.uid}")
+                onResult?.invoke(true, null)
+            }
+            .addOnFailureListener { error ->
+                val message = error.localizedMessage ?: "تعذر حفظ بيانات الحساب في Firestore."
+                android.util.Log.e("WisalMessaging", "Profile save failed", error)
+                onResult?.invoke(false, message)
+            }
     }
 
     fun chatId(otherUid: String): String {
